@@ -319,6 +319,7 @@ with tab4:
         fig.update_traces(textposition='inside', textinfo='percent+label', marker=dict(line=dict(color='#1E1E24', width=2)))
         
     fig.update_layout(
+        height=600,
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         margin=dict(t=40, l=20, r=20, b=20),

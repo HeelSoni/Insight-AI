@@ -33,14 +33,15 @@ class CounterfactualSimulator:
             pred_mod = model.predict(X_mod).mean()
             
             delta_pct = ((pred_mod - pred_orig) / pred_orig * 100) if pred_orig != 0 else 0
+            clean_t = target_col.replace('_', ' ').title()
+            clean_c = change_col.replace('_', ' ').title()
             delta_val = pred_mod - pred_orig
-            direction = "increase" if delta_pct > 0 else "decrease"
+            direction = "Increase" if delta_pct > 0 else "Decrease"
             
             narrative = (
-                f"**AI Interpretation:** If you intentionally raise **{change_col}** by **{pct_change}%**, "
-                f"the Machine Learning model predicts that **{target_col}** will {direction} by **{abs(delta_pct):.2f}%** in response.\n\n"
-                f"*(Specifically, the projected average shifts from `{pred_orig:.2f}` to `{pred_mod:.2f}`)*.\n\n"
-                f"**Why?** The AI determined that **{change_col}** is historically a strong predictive lever for **{target_col}**."
+                f"**AI Prediction:** If you raise **{clean_c}** by **{pct_change}%**, "
+                f"expect **{clean_t}** to {direction} by **{abs(delta_pct):.1f}%**.\n\n"
+                f"*(Average moves from {pred_orig:.1f} → {pred_mod:.1f})*"
             )
             
             return {
