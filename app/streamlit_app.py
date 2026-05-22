@@ -779,6 +779,10 @@ with tab5:
     st.write("Browse through all discovered vectors beneath the hood.")
     df_insights = pd.DataFrame(all_insights)
     if not df_insights.empty:
+        # Strip Markdown bold asterisks out for raw tabular display
+        for col in df_insights.select_dtypes(include=['object']):
+            df_insights[col] = df_insights[col].astype(str).str.replace('**', '', regex=False)
+            
         cols = ["final_score", "type", "description"] + [c for c in df_insights.columns if c not in ["final_score", "type", "description"]]
         df_insights = df_insights[cols]
     st.dataframe(df_insights, use_container_width=True)
