@@ -35,7 +35,7 @@ class PatternEngine:
                 r_pearson = pearson_corr.iloc[i, j]
                 r_spearman = spearman_corr.iloc[i, j]
                 
-                if pd.notna(r_pearson) and abs(r_pearson) > 0.4:
+                if pd.notna(r_pearson) and abs(r_pearson) > 0.3:
                     direction = "positive" if r_pearson > 0 else "negative"
                     col_a_clean = clean_feature_name(col_a)
                     col_b_clean = clean_feature_name(col_b)
@@ -118,7 +118,7 @@ class PatternEngine:
             return insights
 
         try:
-            frequent_itemsets = apriori(ohe_df, min_support=0.1, use_colnames=True)
+            frequent_itemsets = apriori(ohe_df, min_support=0.05, use_colnames=True)
             if frequent_itemsets.empty:
                 return insights
                 
@@ -126,8 +126,8 @@ class PatternEngine:
             if rules.empty:
                 return insights
                 
-            rules = rules[rules['confidence'] >= 0.6]
-            rules = rules.sort_values('lift', ascending=False).head(10)
+            rules = rules[rules['confidence'] >= 0.4]
+            rules = rules.sort_values('lift', ascending=False).head(50)
             
             seen_pairs = set()
             for _, row in rules.iterrows():
@@ -189,7 +189,7 @@ class PatternEngine:
                         best_corr = corr
                         best_lag = lag
                         
-                if best_lag > 0 and abs(best_corr) > 0.35:
+                if best_lag > 0 and abs(best_corr) > 0.25:
                     col_a_clean = clean_feature_name(col_a)
                     col_b_clean = clean_feature_name(col_b)
                     desc = f"⏳ **{col_a_clean}** acts as a leading indicator for **{col_b_clean}** with a delayed response of **{best_lag} days** (correlation of {best_corr:.2f})."
