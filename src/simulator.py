@@ -76,32 +76,76 @@ class CounterfactualSimulator:
             return {"error": str(e)}
 
     def simulate_top_pairs(self, df: pd.DataFrame) -> list:
-        numeric_df = df.select_dtypes(include=[np.number])
+        numeric_df = df.select_dtypes(include=[np.number]).dropna()
         if numeric_df.shape[1] < 2:
             return []
             
-        corr = numeric_df.corr().abs()
-        corr_array = np.array(corr.values, copy=True)
-        np.fill_diagonal(corr_array, 0)
-        
-        top_pairs = []
-        for _ in range(3):
-            if corr_array.max() == 0:
-                break
-            idx = corr_array.argmax()
-            r, c = divmod(idx, corr_array.shape[1])
-            col_a = corr.index[r]
-            col_b = corr.columns[c]
-            top_pairs.append((col_a, col_b))
-            corr_array[r, c] = 0
-            corr_array[c, r] = 0
-            
-        results = []
-        for target, change in top_pairs:
-            res = self.simulate(df, target, change, 10.0)
-            if "error" not in res:
-                results.append(res)
+        # ── 1. Filter out useless simulation targets (IDs, Episodes, Dates) ──
+        bad_keywords = ['id', 'episode', 'season', 'year', 'month', 'day', 'week', 'index', 'zip']
+        valid_cols = []
+        for col in numeric_df.columns:
+            lower_col = col.lower()
+            # Ignore purely categorical/ordinal columns with very few unique values
+            if not any(bw in lower_col for bw in bad_keywords) and numeric_df[col].nunique() > 2:
+                valid_cols.append(col)
                 
+        if len(valid_cols) < 2:
+            # Fallback if the filter is too aggressive
+            valid_cols = [c for c in numeric_df.columns if numeric_df[c].nunique() > 1]
+            if len(valid_cols) < 2:
+                return []
+                
+        # ── 2. Prioritize Business KPIs as Targets ──
+        target_kpis = ['amount', 'val', 'sales', 'revenue', 'profit', 'equity', 'price', 'spend', 'cost', 'score', 'units', 'traffic']
+        potential_targets = []
+        for col in valid_cols:
+            if any(tk in col.lower() for tk in target_kpis):
+                potential_targets.append(col)
+                
+        if not potential_targets:
+            potential_targets = valid_cols
+            
+        # ── 3. Find strong relationships to simulate ──
+        corr = numeric_df[valid_cols].corr().abs()
+        results = []
+        seen_pairs = set()
+        
+        # Pass A: Look for scenarios that actually shift the outcome by > 0.5%
+        for target in potential_targets:
+            related_cols = corr[target].sort_values(ascending=False).index.tolist()
+            for change in related_cols:
+                if target == change:
+                    continue
+                pair = frozenset([target, change])
+                if pair in seen_pairs:
+                    continue
+                    
+                # Try a +20% intervention
+                res = self.simulate(df, target, change, 20.0)
+                if "error" not in res:
+                    if abs(res["delta_pct"]) > 0.5:
+                        results.append(res)
+                        seen_pairs.add(pair)
+                        
+                if len(results) >= 3:
+                    return results
+                    
+        # Pass B: Fallback to any valid pairs if we couldn't find impactful ones
+        if len(results) < 3:
+            for target in potential_targets:
+                related_cols = corr[target].sort_values(ascending=False).index.tolist()
+                for change in related_cols:
+                    if target == change:
+                        continue
+                    pair = frozenset([target, change])
+                    if pair not in seen_pairs:
+                        res = self.simulate(df, target, change, 10.0)
+                        if "error" not in res:
+                            results.append(res)
+                            seen_pairs.add(pair)
+                        if len(results) >= 3:
+                            return results
+                            
         return results
 
 def run_pipeline(filepath: str):
