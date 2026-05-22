@@ -208,12 +208,12 @@ with tab1:
                         strong_neg.append((col_x, col_y, val))
                         
         unique_pos = []
-        for x, y, v in sorted(strong_pos, key=lambda x: x[2], reverse=True):
+        for x, y, v in sorted(strong_pos, key=lambda item: item[2], reverse=True):
             if not any((y == ux and x == uy) for ux, uy, _ in unique_pos):
                 unique_pos.append((x, y, v))
                 
         unique_neg = []
-        for x, y, v in sorted(strong_neg, key=lambda x: x[2]):
+        for x, y, v in sorted(strong_neg, key=lambda item: item[2]):
             if not any((y == ux and x == uy) for ux, uy, _ in unique_neg):
                 unique_neg.append((x, y, v))
                 
@@ -323,8 +323,12 @@ with tab3:
             for s_idx, ts in enumerate(top_sims):
                 with cols_sim[s_idx]:
                     st.markdown(f"<p style='font-size:1.1rem; font-weight:bold; margin-bottom:5px; color:#fff;'>Scenario #{s_idx+1}</p>", unsafe_allow_html=True)
-                    st.info(md_to_html(ts['narrative']))
-                    st.markdown(md_to_html(ts['recommendation']))
+                    narrative = ts.get('narrative', '')
+                    if narrative:
+                        st.info(md_to_html(narrative))
+                    recommendation = ts.get('recommendation', '')
+                    if recommendation:
+                        st.markdown(md_to_html(recommendation))
                     st.markdown("---")
                 
     st.divider()
@@ -346,8 +350,12 @@ with tab3:
                     st.error(res["error"])
                 else:
                     # Bold & clean callouts at the top
-                    st.info(md_to_html(res["narrative"]))
-                    st.markdown(md_to_html(res["recommendation"]))
+                    narrative = res.get("narrative", "")
+                    if narrative:
+                        st.info(md_to_html(narrative))
+                    recommendation = res.get("recommendation", "")
+                    if recommendation:
+                        st.markdown(md_to_html(recommendation))
                     
                     st.divider()
                     
