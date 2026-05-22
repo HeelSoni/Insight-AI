@@ -16,6 +16,8 @@ from src.hypothesis import HypothesisGenerator
 from src.question_gen import QuestionGenerator
 from src.simulator import CounterfactualSimulator
 from src.scoring import InsightScorer
+from src.formatting import clean_feature_name, clean_ohe_value, md_to_html
+
 
 st.set_page_config(page_title="Insight AI", page_icon="✨", layout="wide", initial_sidebar_state="expanded")
 
@@ -179,6 +181,51 @@ with tab1:
         fig_corr.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=500)
         st.plotly_chart(fig_corr, use_container_width=True)
         
+        # Explain the Correlation Heatmap
+        st.markdown(f"""
+        <div style="background-color: #1E1E24; padding: 15px; border-radius: 8px; margin-top: 15px; border-left: 4px solid #FF416C;">
+            <p style="margin: 0; font-weight: bold; color: #fff; font-size: 1.05rem;">
+                💡 Understanding the Correlation Heatmap
+            </p>
+            <p style="margin: 6px 0 0 0; color: #ccc; font-size: 0.9rem; line-height: 1.45;">
+                This heatmap represents the strength of linear relationships between your numeric variables. 
+                Scores range from <strong>-1.00</strong> (perfect inverse relationship) to <strong>+1.00</strong> (perfect direct relationship). 
+                A score of <strong>0.00</strong> implies the variables move entirely independently of one another.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Calculate dynamic insights
+        strong_pos = []
+        strong_neg = []
+        for col_x in corr.columns:
+            for col_y in corr.columns:
+                if col_x != col_y:
+                    val = corr.loc[col_x, col_y]
+                    if val > 0.45:
+                        strong_pos.append((col_x, col_y, val))
+                    elif val < -0.45:
+                        strong_neg.append((col_x, col_y, val))
+                        
+        unique_pos = []
+        for x, y, v in sorted(strong_pos, key=lambda x: x[2], reverse=True):
+            if not any((y == ux and x == uy) for ux, uy, _ in unique_pos):
+                unique_pos.append((x, y, v))
+                
+        unique_neg = []
+        for x, y, v in sorted(strong_neg, key=lambda x: x[2]):
+            if not any((y == ux and x == uy) for ux, uy, _ in unique_neg):
+                unique_neg.append((x, y, v))
+                
+        st.markdown("<p style='margin-top:15px; margin-bottom:5px; font-weight:bold; color:#fff;'>🔍 What this tells us about your active dataset:</p>", unsafe_allow_html=True)
+        if unique_pos or unique_neg:
+            for x, y, v in unique_pos[:2]:
+                st.markdown(f"📈 **Direct Co-Movement**: **{clean_feature_name(x)}** and **{clean_feature_name(y)}** move in the same direction with a positive correlation of **{v:.2f}**. Elevating one will likely drive the other upward.")
+            for x, y, v in unique_neg[:2]:
+                st.markdown(f"📉 **Inverse Constraint**: **{clean_feature_name(x)}** and **{clean_feature_name(y)}** move in opposite directions with a negative correlation of **{v:.2f}**. Increases in one correspond to drops in the other.")
+        else:
+            st.markdown("ℹ️ No strong linear correlations (above ±0.45) detected in this dataset. The numeric fields seem to operate independently.")
+        
     with col_b:
         st.subheader("Distribution Scatter Matrix")
         st.caption("Top 4 Numeric Features")
@@ -188,6 +235,30 @@ with tab1:
             fig_pair.update_traces(diagonal_visible=False, showupperhalf=False, marker=dict(color='#FF416C', opacity=0.6))
             fig_pair.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=500)
             st.plotly_chart(fig_pair, use_container_width=True)
+            
+            # Explain the Scatter Matrix
+            st.markdown(f"""
+            <div style="background-color: #1E1E24; padding: 15px; border-radius: 8px; margin-top: 15px; border-left: 4px solid #00C9FF;">
+                <p style="margin: 0; font-weight: bold; color: #fff; font-size: 1.05rem;">
+                    💡 Understanding the Scatter Matrix
+                </p>
+                <p style="margin: 6px 0 0 0; color: #ccc; font-size: 0.9rem; line-height: 1.45;">
+                    This matrix compares pairs of variables against each other in scatter plots. 
+                    Look for <strong>clustering patterns</strong> (groups of points close together), <strong>slopes or curves</strong> (trends), 
+                    or <strong>diffuse clouds</strong> (indicating random distribution).
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("<p style='margin-top:15px; margin-bottom:5px; font-weight:bold; color:#fff;'>🔍 What this tells us about your active dataset:</p>", unsafe_allow_html=True)
+            for col in top_cols[:2]:
+                col_clean = clean_feature_name(col)
+                skew = df_proc[col].skew()
+                if abs(skew) > 0.8:
+                    direction = "skewed toward high values (right tail)" if skew > 0 else "skewed toward low values (left tail)"
+                    st.markdown(f"📊 **{col_clean}** exhibits high skewness, concentrating heavily on the **{direction}**. Watch out for outliers affecting baseline averages.")
+                else:
+                    st.markdown(f"📊 **{col_clean}** shows a relatively balanced, even distribution across its sample scale.")
         else:
             st.info("Not enough numeric columns for pairplot.")
 
@@ -218,18 +289,21 @@ with tab2:
         
         badge_cls = get_badge_class(itype)
         
-        questions_html = "".join([f"<li>{q}</li>" for q in qs])
+        # Convert markdown parameters in descriptors to html tags
+        desc_html = md_to_html(desc)
+        hypo_html = md_to_html(hypo)
+        questions_html = "".join([f"<li>{md_to_html(q)}</li>" for q in qs])
         
         html_str = (
             f'<div class="insight-card">'
             f'<div class="insight-title">🔍 Insight #{idx+1}</div>'
             f'<span class="badge {badge_cls}">{itype}</span>'
             f'<span class="badge score-badge">Score: {score:.1f} (Conf: {c_score:.0f} | Nov: {n_score:.0f} | Imp: {i_score:.0f})</span>'
-            f'<div class="section-title">Pattern Details</div>'
-            f'<div class="text-content">{desc}</div>'
-            f'<div class="section-title">Hypothesis</div>'
-            f'<div class="text-content">{hypo}</div>'
-            f'<div class="section-title">Follow-up Questions</div>'
+            f'<div class="section-title">💡 The Pattern</div>'
+            f'<div class="text-content">{desc_html}</div>'
+            f'<div class="section-title">🧠 Business Hypothesis & Reasoning</div>'
+            f'<div class="text-content">{hypo_html}</div>'
+            f'<div class="section-title">🙋 Strategic Next-Step Questions</div>'
             f'<div class="text-content"><ul>{questions_html}</ul></div>'
             f'</div>'
         )
@@ -237,7 +311,7 @@ with tab2:
 
 
 with tab3:
-    st.header("Counterfactual Simulator")
+    st.header("🎛️ Counterfactual Simulator")
     st.markdown("Use Machine Learning to simulate *What-If* scenarios by altering historical signals.")
     
     sim = CounterfactualSimulator()
@@ -245,8 +319,13 @@ with tab3:
     
     if top_sims:
         with st.expander("✨ Auto-Simulated Recommended Scenarios", expanded=True):
-            for ts in top_sims:
-                st.success(f"**Impact Alert**: {ts['narrative']}")
+            cols_sim = st.columns(len(top_sims))
+            for s_idx, ts in enumerate(top_sims):
+                with cols_sim[s_idx]:
+                    st.markdown(f"<p style='font-size:1.1rem; font-weight:bold; margin-bottom:5px; color:#fff;'>Scenario #{s_idx+1}</p>", unsafe_allow_html=True)
+                    st.info(md_to_html(ts['narrative']))
+                    st.markdown(md_to_html(ts['recommendation']))
+                    st.markdown("---")
                 
     st.divider()
     st.subheader("Custom Simulation Run")
@@ -255,8 +334,8 @@ with tab3:
         st.warning("Need at least 2 numeric columns to run simulations.")
     else:
         col_target, col_change, col_val = st.columns(3)
-        target_col = col_target.selectbox("Target Outcome Predictor", num_cols, index=0)
-        change_col = col_change.selectbox("Influential Variable to Modify", num_cols, index=1)
+        target_col = col_target.selectbox("Target Outcome Predictor", num_cols, index=0, format_func=clean_feature_name)
+        change_col = col_change.selectbox("Influential Variable to Modify", num_cols, index=1, format_func=clean_feature_name)
         pct_change = col_val.slider("% Intervention Change", -50, 100, 10)
         
         if st.button("🚀 Run AI Simulation"):
@@ -266,19 +345,33 @@ with tab3:
                 if "error" in res:
                     st.error(res["error"])
                 else:
-                    st.success(res["narrative"])
-                    metric_col, chart_col = st.columns([1, 2])
+                    # Bold & clean callouts at the top
+                    st.info(md_to_html(res["narrative"]))
+                    st.markdown(md_to_html(res["recommendation"]))
+                    
+                    st.divider()
+                    
+                    metric_col, chart_col = st.columns([1, 1], gap="large")
                     with metric_col:
-                        st.metric(f"Simulated Shift in {target_col}", f"{res['delta_pct']:.2f}%", f"{res['predicted_modified_mean'] - res['predicted_original_mean']:.2f} Abs Units")
-                    with chart_col:
+                        st.markdown(f"**Impact Summary:**")
+                        clean_target = clean_feature_name(target_col)
+                        st.metric(f"Simulated Shift in {clean_target}", f"{res['delta_pct']:.2f}%", f"{res['predicted_modified_mean'] - res['predicted_original_mean']:.2f} Abs Units")
+                        
                         chart_data = pd.DataFrame({
                             "Scenario": ["Actual Baseline", "Simulated Intervention"],
                             "Predicted Mean": [res["predicted_original_mean"], res["predicted_modified_mean"]]
                         })
                         fig_bar = px.bar(chart_data, x="Scenario", y="Predicted Mean", color="Scenario", 
-                                        color_discrete_sequence=['#888888', '#FF416C'], text_auto='.2f')
-                        fig_bar.update_layout(showlegend=False)
+                                        color_discrete_sequence=['#888888', '#FF416C'], text_auto='.2f', template="plotly_dark")
+                        fig_bar.update_layout(showlegend=False, height=350, margin=dict(l=0, r=0, t=10, b=0))
                         st.plotly_chart(fig_bar, use_container_width=True)
+                        
+                    with chart_col:
+                        st.markdown("🔑 **Key Features Influencing this Target Variable:**")
+                        st.caption("These features are detected by the AI model as having the highest relative predictive strength.")
+                        for driver in res["drivers"]:
+                            st.write(f"**{driver['feature']}** ({driver['importance']:.1f}% relative strength)")
+                            st.progress(driver['importance'] / 100.0)
 
 with tab4:
     st.header("📈 Interactive Data Explorer")

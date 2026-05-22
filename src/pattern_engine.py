@@ -8,6 +8,8 @@ try:
 except ImportError:
     MLXTEND_AVAILABLE = False
 import logging
+from src.formatting import clean_feature_name, clean_ohe_value
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,10 +37,12 @@ class PatternEngine:
                 
                 if pd.notna(r_pearson) and abs(r_pearson) > 0.4:
                     direction = "positive" if r_pearson > 0 else "negative"
-                    desc = f"{col_a} and {col_b} show a strong {direction} correlation (r = {r_pearson:.2f})"
+                    col_a_clean = clean_feature_name(col_a)
+                    col_b_clean = clean_feature_name(col_b)
+                    desc = f"📈 **{col_a_clean}** and **{col_b_clean}** move in the **{direction}** direction. When one rises, the other tends to {'increase' if direction == 'positive' else 'decrease'} (correlation score of {r_pearson:.2f})."
                     
                     if pd.notna(r_spearman) and abs(r_pearson - r_spearman) > 0.2:
-                        desc += ". The relationship appears to be non-linear."
+                        desc += " The relationship appears to have non-linear properties, indicating complex scaling."
                         
                     insights.append({
                         "type": "correlation",
@@ -85,7 +89,8 @@ class PatternEngine:
             top_features = diffs.nlargest(3).index.tolist()
             
             feature_dict = {f: float(means[f]) for f in top_features}
-            desc = f"Cluster {c}: Represents {size_pct:.1f}% of data. High/low on " + ", ".join(top_features)
+            clean_features = [clean_feature_name(f) for f in top_features]
+            desc = f"👥 **Cluster {c}** (representing **{size_pct:.1f}%** of the data) is highly distinctive. This group is characterized by distinct values in **{', '.join(clean_features)}**."
             
             insights.append({
                 "type": "cluster",
@@ -128,7 +133,9 @@ class PatternEngine:
                 ant = list(row['antecedents'])[0] if row['antecedents'] else ""
                 con = list(row['consequents'])[0] if row['consequents'] else ""
                 
-                desc = f"When {ant} happens, {con} follows {row['confidence']*100:.0f}% of the time (lift={row['lift']:.2f})"
+                ant_clean = clean_ohe_value(str(ant))
+                con_clean = clean_ohe_value(str(con))
+                desc = f"🛍️ When {ant_clean}, there is a **{row['confidence']*100:.0f}% probability** that {con_clean} (this occurs {row['lift']:.2f}x more frequently than under normal random conditions)."
                 insights.append({
                     "type": "association",
                     "antecedent": str(ant),
@@ -176,7 +183,9 @@ class PatternEngine:
                         best_lag = lag
                         
                 if best_lag > 0 and abs(best_corr) > 0.35:
-                    desc = f"{col_a} affects {col_b} with a delay of {best_lag} days (r={best_corr:.2f})"
+                    col_a_clean = clean_feature_name(col_a)
+                    col_b_clean = clean_feature_name(col_b)
+                    desc = f"⏳ **{col_a_clean}** acts as a leading indicator for **{col_b_clean}** with a delayed response of **{best_lag} days** (correlation of {best_corr:.2f})."
                     insights.append({
                         "type": "time_lag",
                         "cause": col_a,

@@ -3,6 +3,7 @@ import numpy as np
 import logging
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
+from src.formatting import clean_feature_name
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,14 @@ class CounterfactualSimulator:
             
             importances = model.feature_importances_
             feat_imp = pd.Series(importances, index=X.columns).sort_values(ascending=False)
-            top_predictors = feat_imp.head(5).index.tolist()
+            
+            drivers = []
+            for col, imp in feat_imp.head(5).items():
+                drivers.append({
+                    "feature": clean_feature_name(col),
+                    "raw_col": col,
+                    "importance": float(imp * 100)
+                })
             
             X_mod = X.copy()
             X_mod[change_col] = X_mod[change_col] * (1 + pct_change / 100.0)
@@ -33,15 +41,23 @@ class CounterfactualSimulator:
             pred_mod = model.predict(X_mod).mean()
             
             delta_pct = ((pred_mod - pred_orig) / pred_orig * 100) if pred_orig != 0 else 0
-            clean_t = target_col.replace('_', ' ').title()
-            clean_c = change_col.replace('_', ' ').title()
+            clean_t = clean_feature_name(target_col)
+            clean_c = clean_feature_name(change_col)
             delta_val = pred_mod - pred_orig
             direction = "Increase" if delta_pct > 0 else "Decrease"
             
+            # Formulate strategic business recommendation
+            if delta_pct > 2.0:
+                recommendation = f"💡 **Strategic Recommendation:** Increasing **{clean_c}** is predicted to significantly boost **{clean_t}**. If this aligns with your business goals, consider allocating additional resource or campaign budget to **{clean_c}** to capitalize on this high-leverage driver."
+            elif delta_pct < -2.0:
+                recommendation = f"⚠️ **Risk Advisory:** Raising **{clean_c}** is predicted to suppress **{clean_t}** by {abs(delta_pct):.1f}%. We recommend exercising caution and potentially reducing exposure or optimizing this interaction to prevent unintended negative side-effects."
+            else:
+                recommendation = f"ℹ️ **Strategic Insight:** Modifying **{clean_c}** has a minor impact (about {delta_pct:.2f}%) on **{clean_t}**. This suggests **{clean_t}** is highly inelastic with respect to **{clean_c}**. We recommend prioritizing resources on stronger driver variables."
+                
             narrative = (
-                f"**AI Prediction:** If you raise **{clean_c}** by **{pct_change}%**, "
-                f"expect **{clean_t}** to {direction} by **{abs(delta_pct):.1f}%**.\n\n"
-                f"*(Average moves from {pred_orig:.1f} → {pred_mod:.1f})*"
+                f"**AI Prediction Summary:** If you alter **{clean_c}** by **{pct_change:+.1f}%**, "
+                f"expect **{clean_t}** to **{direction.lower()}** by **{abs(delta_pct):.1f}%** on average.\n\n"
+                f"*(Baseline average moves from {pred_orig:.2f} --> {pred_mod:.2f} units)*"
             )
             
             return {
@@ -51,8 +67,9 @@ class CounterfactualSimulator:
                 "predicted_original_mean": float(pred_orig),
                 "predicted_modified_mean": float(pred_mod),
                 "delta_pct": float(delta_pct),
-                "top_predictors": top_predictors,
-                "narrative": narrative
+                "drivers": drivers,
+                "narrative": narrative,
+                "recommendation": recommendation
             }
         except Exception as e:
             logger.error(f"Simulation failed: {e}")

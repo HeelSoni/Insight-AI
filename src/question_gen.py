@@ -4,6 +4,8 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+from src.formatting import clean_feature_name, clean_ohe_value
+
 class QuestionGenerator:
     def __init__(self):
         pass
@@ -13,39 +15,42 @@ class QuestionGenerator:
         questions = []
         
         if itype == "correlation":
-            col_a = insight.get("col_a", "A")
-            col_b = insight.get("col_b", "B")
+            col_a_clean = clean_feature_name(insight.get("col_a", "A"))
+            col_b_clean = clean_feature_name(insight.get("col_b", "B"))
             questions = [
-                f"Why does {col_a} change significantly when {col_b} fluctuates?",
-                f"Is this relationship consistent across all time periods, or only seasonally?",
-                f"Which other variables might be driving both {col_a} and {col_b}?"
+                f"What underlying operational or market drivers could explain the link between {col_a_clean} and {col_b_clean}?",
+                f"Is this relationship consistent year-round, or does it shift during specific quarters?",
+                f"Are there any secondary variables that might be simultaneously influencing both features?"
             ]
 
         elif itype == "cluster":
             c_int = insight.get("cluster_id", 0)
             questions = [
-                f"Why is Cluster {c_int} behaving so differently from the others?",
-                f"What event or factor could explain the unique pattern in Cluster {c_int}?",
-                f"How has the size of Cluster {c_int} changed over time?"
+                f"What specific customer behaviors or system parameters set Cluster {c_int} apart from other cohorts?",
+                f"What trigger events or seasonal shifts might explain the formation of Cluster {c_int}?",
+                f"How has the user base or sample size inside Cluster {c_int} trended historically?"
             ]
 
         elif itype == "association":
-            ant = insight.get("antecedent", "A")
-            con = insight.get("consequent", "B")
+            ant_clean = clean_ohe_value(insight.get("antecedent", "A"))
+            con_clean = clean_ohe_value(insight.get("consequent", "B"))
+            # Remove asterisks if they exist for text flow
+            ant_text = ant_clean.replace("**", "")
+            con_text = con_clean.replace("**", "")
             questions = [
-                f"Why does {ant} so strongly predict {con}?",
-                f"Does this association hold in all segments, or only certain groups?",
-                f"What would happen to {con} if {ant} were discontinued or reduced?"
+                f"What sequential user journey or system logic explains why {ant_text} strongly triggers {con_text}?",
+                f"Does this behavioral link hold universally across all segments, or is it isolated to certain groups?",
+                f"What proactive actions can we take to influence or capitalize on {con_text} once we detect {ant_text}?"
             ]
 
         elif itype == "time_lag":
-            cause = insight.get("cause", "X")
-            effect = insight.get("effect", "Y")
+            cause_clean = clean_feature_name(insight.get("cause", "X"))
+            effect_clean = clean_feature_name(insight.get("effect", "Y"))
             lag = insight.get("lag_days", 1)
             questions = [
-                f"Why is there a {lag}-day delay between {cause} and {effect}?",
-                f"Does this delay shorten during peak periods or remain constant?",
-                f"Can {cause} be used as a reliable early-warning signal for {effect}?"
+                f"What physical or process bottlenecks cause the {lag}-day lag between {cause_clean} and {effect_clean}?",
+                f"Does this delay shorten or lengthen during high-volume periods or holidays?",
+                f"How can we operationalize {cause_clean} as an early warning system to prepare for {effect_clean} shifts?"
             ]
             
         return questions

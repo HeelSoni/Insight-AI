@@ -3,6 +3,8 @@ import numpy as np
 import sys
 import os
 
+sys.stdout.reconfigure(encoding='utf-8')
+
 # Ensure the correct path
 sys.path.append(os.path.abspath('C:\\Users\\Heel\\OneDrive\\Desktop\\Insight AI\\insight_ai'))
 from src.simulator import CounterfactualSimulator
