@@ -131,22 +131,23 @@ class PatternEngine:
             
             seen_pairs = set()
             for _, row in rules.iterrows():
-                ant = list(row['antecedents'])[0] if row['antecedents'] else ""
-                con = list(row['consequents'])[0] if row['consequents'] else ""
+                ant_items = sorted([str(x) for x in row['antecedents']])
+                con_items = sorted([str(x) for x in row['consequents']])
                 
-                # Prevent duplicate bidirectional rules
-                pair = frozenset([str(ant), str(con)])
-                if pair in seen_pairs:
+                # Create a unique fingerprint for this specific directional rule
+                rule_signature = frozenset([tuple(ant_items), tuple(con_items)])
+                if rule_signature in seen_pairs:
                     continue
-                seen_pairs.add(pair)
+                seen_pairs.add(rule_signature)
                 
-                ant_clean = clean_ohe_value(str(ant))
-                con_clean = clean_ohe_value(str(con))
+                ant_clean = " AND ".join([clean_ohe_value(x) for x in ant_items])
+                con_clean = " AND ".join([clean_ohe_value(x) for x in con_items])
                 desc = f"🛍️ When {ant_clean}, there is a **{row['confidence']*100:.0f}% probability** that {con_clean} (this occurs {row['lift']:.2f}x more frequently than under normal random conditions)."
+                
                 insights.append({
                     "type": "association",
-                    "antecedent": str(ant),
-                    "consequent": str(con),
+                    "antecedent": ", ".join(ant_items),
+                    "consequent": ", ".join(con_items),
                     "support": float(row['support']),
                     "confidence": float(row['confidence']),
                     "lift": float(row['lift']),
