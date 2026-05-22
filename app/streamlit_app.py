@@ -71,6 +71,8 @@ st.markdown("""
     .badge-association { background-color: #9C27B0; color: white; }
     .badge-timelag { background-color: #FF9800; color: white; }
     .badge-anomaly { background-color: #F44336; color: white; }
+    .badge-distribution { background-color: #00BCD4; color: white; }
+    .badge-numericinsight { background-color: #607D8B; color: white; }
     
     .score-badge { background-color: #333; color: #FFA500; }
     
@@ -140,7 +142,7 @@ with st.sidebar:
 
 
 @st.cache_data(show_spinner=False)
-def process_data_v2(file_obj_or_path):
+def process_data_v3(file_obj_or_path):
     preprocessor = DataPreprocessor()
     
     # Bug fix: Streamlit UploadedFile requires seeking to 0 if it's read by pd.read_csv
@@ -176,9 +178,9 @@ data_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'sample_sales_
 
 with st.spinner("Analyzing data patterns... please wait."):
     if uploaded_file is not None:
-        df_raw, df_proc, profile, all_insights = process_data_v2(uploaded_file)
+        df_raw, df_proc, profile, all_insights = process_data_v3(uploaded_file)
     elif os.path.exists(data_path):
-        df_raw, df_proc, profile, all_insights = process_data_v2(data_path)
+        df_raw, df_proc, profile, all_insights = process_data_v3(data_path)
     else:
         st.info("Please upload a CSV or generate the sample data via terminal (`python data/generate_data.py`).")
         st.stop()
@@ -309,13 +311,15 @@ with tab1:
             st.info("Not enough numeric columns for pairplot.")
 
 def get_badge_class(itype):
-    t = itype.lower()
+    t = itype.lower().replace(' ', '')
     if 'correlation' in t: return 'badge-correlation'
     if 'cluster' in t: return 'badge-cluster'
     if 'association' in t: return 'badge-association'
     if 'lag' in t: return 'badge-timelag'
     if 'anomaly' in t: return 'badge-anomaly'
-    return ''
+    if 'distribution' in t: return 'badge-distribution'
+    if 'numeric' in t: return 'badge-numericinsight'
+    return 'badge-distribution'
 
 with tab2:
     st.subheader(f"Top {len(insights)} Deep Insights")
