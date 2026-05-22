@@ -129,16 +129,24 @@ class PatternEngine:
             rules = rules[rules['confidence'] >= 0.4]
             rules = rules.sort_values('lift', ascending=False).head(50)
             
-            seen_pairs = set()
+            seen_item_sets = []
             for _, row in rules.iterrows():
                 ant_items = sorted([str(x) for x in row['antecedents']])
                 con_items = sorted([str(x) for x in row['consequents']])
                 
-                # Create a unique fingerprint for this specific directional rule
-                rule_signature = frozenset([tuple(ant_items), tuple(con_items)])
-                if rule_signature in seen_pairs:
+                current_items = set(ant_items + con_items)
+                
+                # Check if this is just a variation (superset/subset/reverse) of a logged rule
+                is_variation = False
+                for seen in seen_item_sets:
+                    if len(current_items.intersection(seen)) >= 2:
+                        is_variation = True
+                        break
+                        
+                if is_variation:
                     continue
-                seen_pairs.add(rule_signature)
+                    
+                seen_item_sets.append(current_items)
                 
                 ant_clean = " AND ".join([clean_ohe_value(x) for x in ant_items])
                 con_clean = " AND ".join([clean_ohe_value(x) for x in con_items])
