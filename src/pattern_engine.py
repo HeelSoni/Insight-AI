@@ -128,9 +128,10 @@ class PatternEngine:
 
     # ─────────────────────────────────────────────
     # 3. ASSOCIATIONS  (categorical → categorical)
-    #    Key fix: deduplicate by SOURCE column pairs,
-    #    not by OHE value strings, and skip high-
-    #    cardinality ID-like columns entirely.
+    #    Deduplicate strictly by SOURCE COLUMN PAIRS.
+    #    High-cardinality columns (IDs/names) are
+    #    excluded before OHE so trivial startup→investor
+    #    rules never appear. Hard cap: 5 max.
     # ─────────────────────────────────────────────
     def _find_associations(self, df: pd.DataFrame) -> list:
         insights = []
@@ -144,11 +145,16 @@ class PatternEngine:
 
         n_rows = len(cat_df)
 
-        # ── Drop high-cardinality columns (IDs / names with >30 % unique rows) ──
+        # ── Drop high-cardinality columns (IDs / startup names / unique combos)
+        # Keep only columns whose unique-value count ≤ min(20, 20% of rows).
+        # This eliminates "Startup Name", "Sharks Invested" combos, etc.
+        max_unique = max(5, int(n_rows * 0.20))
         useful_cat_cols = [
             col for col in cat_df.columns
-            if 2 <= cat_df[col].nunique() <= max(10, n_rows * 0.30)
+            if 2 <= cat_df[col].nunique() <= max_unique
         ]
+
+        logger.info(f"Association engine: {len(useful_cat_cols)} low-cardinality cols from {cat_df.shape[1]} total")
 
         if len(useful_cat_cols) < 2:
             logger.info("Not enough low-cardinality categorical columns for associations.")
@@ -156,12 +162,13 @@ class PatternEngine:
 
         cat_filtered = cat_df[useful_cat_cols]
 
-        # ── Build OHE and track ohe_col → source column ──────────────────────
+        # ── Build OHE and track ohe_col_name → source_column ─────────────────
         ohe_df = pd.get_dummies(cat_filtered)
-        if ohe_df.empty or ohe_df.shape[1] > 150:
+        if ohe_df.empty or ohe_df.shape[1] > 200:
             return insights
 
-        ohe_to_source: dict[str, str] = {}
+        # Build reverse map: exact OHE column name → source column name
+        ohe_to_source = {}
         for col in useful_cat_cols:
             for val in cat_filtered[col].dropna().unique():
                 ohe_col = f"{col}_{val}"
@@ -180,29 +187,31 @@ class PatternEngine:
             rules = rules[rules['confidence'] >= 0.4]
             rules = rules.sort_values('lift', ascending=False)
 
-            # ── Deduplicate by SOURCE column pairs (not value strings) ────────
-            # This guarantees every insight is about a DIFFERENT column relationship.
-            seen_col_pairs: set = set()
+            # ── Strict column-pair deduplication ─────────────────────────────
+            # Once we've seen "Industry → Season", skip ALL other variants of it.
+            seen_col_pairs = set()
 
             for _, row in rules.iterrows():
+                # Hard cap: stop after 5 association insights
+                if len(insights) >= 5:
+                    break
+
                 ant_items = sorted([str(x) for x in row['antecedents']])
                 con_items = sorted([str(x) for x in row['consequents']])
 
-                # Map each OHE item → its original column name
-                ant_src = frozenset(ohe_to_source.get(x, x) for x in ant_items)
-                con_src = frozenset(ohe_to_source.get(x, x) for x in con_items)
+                # Map OHE column names back to source column names
+                ant_src = frozenset(ohe_to_source.get(x, "__unknown__") for x in ant_items)
+                con_src = frozenset(ohe_to_source.get(x, "__unknown__") for x in con_items)
 
-                # Skip if antecedent and consequent overlap in source columns
+                # Skip if ant and con share the same source column (self-reference)
                 if ant_src & con_src:
                     continue
 
-                col_pair_fwd = (ant_src, con_src)
-                col_pair_rev = (con_src, ant_src)
-
-                if col_pair_fwd in seen_col_pairs or col_pair_rev in seen_col_pairs:
+                # Skip if we have already seen this column relationship (forward OR reverse)
+                if (ant_src, con_src) in seen_col_pairs or (con_src, ant_src) in seen_col_pairs:
                     continue
 
-                seen_col_pairs.add(col_pair_fwd)
+                seen_col_pairs.add((ant_src, con_src))
 
                 ant_clean = " AND ".join([clean_ohe_value(x) for x in ant_items])
                 con_clean = " AND ".join([clean_ohe_value(x) for x in con_items])
@@ -210,12 +219,10 @@ class PatternEngine:
                     f"🛍️ When {ant_clean}, there is a "
                     f"**{row['confidence'] * 100:.0f}% probability** that {con_clean} "
                     f"(this occurs **{row['lift']:.2f}×** more frequently than by random chance). "
-                    f"Support: {row['support'] * 100:.1f}% of all records match this pattern."
+                    f"Support: {row['support'] * 100:.1f}% of records match this pattern."
                 )
 
                 insights.append({
-                    "type":       "association",
-                    "antecedent": ", ".join(ant_items),
                     "consequent": ", ".join(con_items),
                     "support":    float(row['support']),
                     "confidence": float(row['confidence']),

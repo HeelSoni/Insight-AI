@@ -10,6 +10,17 @@ import time
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+import importlib
+from src import preprocessing, pattern_engine, hypothesis, question_gen, simulator, scoring, formatting
+
+importlib.reload(preprocessing)
+importlib.reload(pattern_engine)
+importlib.reload(hypothesis)
+importlib.reload(question_gen)
+importlib.reload(simulator)
+importlib.reload(scoring)
+importlib.reload(formatting)
+
 from src.preprocessing import DataPreprocessor
 from src.pattern_engine import PatternEngine
 from src.hypothesis import HypothesisGenerator
@@ -142,7 +153,7 @@ with st.sidebar:
 
 
 @st.cache_data(show_spinner=False)
-def process_data_v3(file_obj_or_path):
+def process_data_v4(file_obj_or_path):
     preprocessor = DataPreprocessor()
     
     # Bug fix: Streamlit UploadedFile requires seeking to 0 if it's read by pd.read_csv
@@ -178,14 +189,44 @@ data_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'sample_sales_
 
 with st.spinner("Analyzing data patterns... please wait."):
     if uploaded_file is not None:
-        df_raw, df_proc, profile, all_insights = process_data_v3(uploaded_file)
+        df_raw, df_proc, profile, all_insights = process_data_v4(uploaded_file)
     elif os.path.exists(data_path):
-        df_raw, df_proc, profile, all_insights = process_data_v3(data_path)
+        df_raw, df_proc, profile, all_insights = process_data_v4(data_path)
     else:
         st.info("Please upload a CSV or generate the sample data via terminal (`python data/generate_data.py`).")
         st.stop()
 
-insights = [i for i in all_insights if i.get("final_score", 0) >= min_score][:num_insights_to_show]
+# ─── Enforce type diversity ───────────────────────────────────────────────────
+# Never let any single insight type dominate — cap each type at 3 slots.
+# This guarantees the Top Insights list is always a rich, varied cross-section.
+from collections import defaultdict
+
+def _build_diverse_insights(pool: list, max_per_type: int, total: int) -> list:
+    """Pick insights from pool ensuring no type appears more than max_per_type times."""
+    type_counts: dict = defaultdict(int)
+    diverse: list = []
+    # First pass: fill up to max_per_type per type
+    for ins in pool:
+        t = ins.get("type", "unknown")
+        if type_counts[t] < max_per_type:
+            diverse.append(ins)
+            type_counts[t] += 1
+        if len(diverse) >= total:
+            break
+    # Second pass: if still short, fill with anything left
+    if len(diverse) < total:
+        seen_ids = set(id(i) for i in diverse)
+        for ins in pool:
+            if id(ins) not in seen_ids:
+                diverse.append(ins)
+                seen_ids.add(id(ins))
+            if len(diverse) >= total:
+                break
+    return diverse
+
+# Filter by minimum score first, then apply diversity cap
+_filtered_pool = [i for i in all_insights if i.get("final_score", 0) >= min_score]
+insights = _build_diverse_insights(_filtered_pool, max_per_type=3, total=num_insights_to_show)
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview", "💡 Top Insights", "🎛️ Simulate", "📈 Data Explorer", "⚙️ Raw Patterns"])
 
