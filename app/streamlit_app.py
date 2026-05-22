@@ -140,7 +140,7 @@ with st.sidebar:
 
 
 @st.cache_data(show_spinner=False)
-def process_data(file_obj_or_path):
+def process_data_v2(file_obj_or_path):
     preprocessor = DataPreprocessor()
     
     # Bug fix: Streamlit UploadedFile requires seeking to 0 if it's read by pd.read_csv
@@ -176,9 +176,9 @@ data_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'sample_sales_
 
 with st.spinner("Analyzing data patterns... please wait."):
     if uploaded_file is not None:
-        df_raw, df_proc, profile, all_insights = process_data(uploaded_file)
+        df_raw, df_proc, profile, all_insights = process_data_v2(uploaded_file)
     elif os.path.exists(data_path):
-        df_raw, df_proc, profile, all_insights = process_data(data_path)
+        df_raw, df_proc, profile, all_insights = process_data_v2(data_path)
     else:
         st.info("Please upload a CSV or generate the sample data via terminal (`python data/generate_data.py`).")
         st.stop()
