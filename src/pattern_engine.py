@@ -129,9 +129,16 @@ class PatternEngine:
             rules = rules[rules['confidence'] >= 0.6]
             rules = rules.sort_values('lift', ascending=False).head(10)
             
+            seen_pairs = set()
             for _, row in rules.iterrows():
                 ant = list(row['antecedents'])[0] if row['antecedents'] else ""
                 con = list(row['consequents'])[0] if row['consequents'] else ""
+                
+                # Prevent duplicate bidirectional rules
+                pair = frozenset([str(ant), str(con)])
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
                 
                 ant_clean = clean_ohe_value(str(ant))
                 con_clean = clean_ohe_value(str(con))
